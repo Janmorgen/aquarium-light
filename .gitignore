@@ -1,0 +1,9 @@
+# Wi-Fi credentials and timezone — copy secrets.h.example to secrets.h
+secrets.h
+
+# Arduino IDE / arduino-cli build output
+build/
+*.bin
+*.elf
+*.hex
+*.map
