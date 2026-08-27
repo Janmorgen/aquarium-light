@@ -12,8 +12,8 @@ from NTP, so the schedule follows the real clock including DST.
 | ESP32 | Developed against an ESP32-WROOM-DA |
 | WS2812B panel | 8 rows x 32 columns, 256 LEDs |
 | Data pin | GPIO 26 (`DATA_PIN` in `graphics.h`) |
-| VBUS sense | GPIO 19 (`VBUS_SENSE_PIN` in `power.h`) |
-| Supply | 5 V, budgeted at 5 A via `setMaxPowerInVoltsAndMilliamps` |
+| Test switch | GPIO 32 to GND (`TEST_SWITCH_PIN` in `controls.h`) |
+| Supply | 5 V, budgeted at 5 A normally, 500 mA in test mode |
 
 The panel is wired as a **column-major serpentine**: column 0 runs top to
 bottom, column 1 bottom to top, and so on, 8 pixels per column.
@@ -97,10 +97,10 @@ rippling through water.
 | `graphics.h` | Panel addressing, the five modes, transitions, dim waves |
 | `time_definitions.h` | Hour-to-mode mapping |
 | `wifi_helpers.h` | Wi-Fi connect/disconnect, NTP, clock reads |
-| `power.h` | USB VBUS detection |
+| `power.h` | Current budgets for the two modes |
 | `pixels.h` | Per-pixel color easing helper (not currently used) |
 | `regulator.h` | Non-blocking interval timer (not currently used) |
-| `controls.h` | Placeholder for physical controls |
+| `controls.h` | Test mode switch, debounced |
 | `secrets.h` | Your credentials — gitignored |
 
 ### Addressing pixels
@@ -113,9 +113,57 @@ arguments in `(col0, col1, row0, row1)` order to match.
 fillRegionScaled(0, 5, 0, ROWS - 1, CRGB(255, 245, 230), 153);  // leftmost 6 columns
 ```
 
-## Testing without waiting for the clock
+## Test mode
 
-`graphics_setup_test()` / `graphics_loop_test()` cycle through every mode on a
-timer instead of following real time. Swap them in for `graphics_setup()` /
-`graphics_loop()` in the sketch. `graphics_init_test()` also caps the power
-budget at 500 mA, which is safe for bench testing over USB.
+A switch or jumper shorting GPIO 32 to GND puts the light in test mode:
+
+```
+GPIO 32 ---o/ o--- GND        closed = test mode
+```
+
+| Switch | Mode | Current budget |
+| --- | --- | --- |
+| Open | Clock schedule, NTP synced | 5 A |
+| Closed | Cycles every mode on a timer | 500 mA |
+
+Close it when the light is on a bench running off the USB cable: the panel
+drops to a current a USB port can actually deliver and starts cycling the
+modes. Open it and the schedule comes back. The switch is read at boot and
+polled while running, so throwing it either way takes effect immediately with
+no reboot - re-budgeting calls `setMaxPowerInVoltsAndMilliamps()` again rather
+than re-running `addLeds()`, which must only ever happen once.
+
+Test mode never touches Wi-Fi, so a bench run works with no network in reach.
+If the switch is opened on a board that booted into test mode, it syncs the
+clock at that point before handing over to the schedule.
+
+Test mode runs on its own timings (`TEST_CROSSFADE_MS`, `TEST_MODE_DWELL_MS`
+in `graphics.h`, 8 s and 12 s) so a full pass through the five modes takes
+about a minute instead of the ten the real 60 s crossfades would take.
+
+| Define | Default | Meaning |
+| --- | --- | --- |
+| `TEST_SWITCH_PIN` | `32` | Pin the switch pulls |
+| `TEST_SWITCH_ACTIVE_LEVEL` | `LOW` | Level meaning test mode |
+| `TEST_POWER_BUDGET_MA` | `500` | Cap in test mode |
+| `NORMAL_POWER_BUDGET_MA` | `5000` | Cap on the schedule |
+
+GPIO 32 has an internal pull-up and is not a strapping pin, so it is safe to
+hold either way at boot, and an unwired pin reads as "not test mode". Pins
+34-39 would not work here - they have no internal pull-ups. Each reading is a
+majority vote of 9 samples and a change has to hold for 100 ms, so switch
+bounce and a long run beside the LED data line cannot flip the panel back and
+forth.
+
+### Why a switch and not USB detection
+
+The board cannot tell what is powering it. The classic ESP32 has no USB
+peripheral, and this DevKit does not route VBUS to a GPIO - probed with USB
+connected, all 34 usable pins simply follow their internal pull. (An earlier
+version of `power.h` read GPIO 19 as a VBUS sense; that never worked.)
+
+Sensing the 5 V rail instead does not help either, because USB VBUS and the
+strip's supply arrive on the same 5 V pin - the rail reads 5 V whichever one is
+up. Separating them would take a Schottky in the feed to the ESP32, at which
+point a divider on the strip-side rail would work. A switch costs less and
+never guesses wrong.

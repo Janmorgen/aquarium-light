@@ -13,6 +13,10 @@
 #define COLOR_ORDER GRB
 #define BRIGHTNESS 50  // global max (0-255)
 #define MODE_CROSSFADE_MS 60000
+// Test mode runs on its own, much faster clock so a bench run shows every mode
+// in a couple of minutes instead of ten.
+#define TEST_CROSSFADE_MS 8000
+#define TEST_MODE_DWELL_MS 12000
 // ----------------------------
 
 CRGB leds[NUM_LEDS];
@@ -280,22 +284,25 @@ void setMode(int mode, uint32_t crossfadeMs = MODE_CROSSFADE_MS) {
 
 // Setup
 int currentMode = -1;
-void graphics_init() {
+
+// Brings up the panel. maxMilliamps is the supply budget FastLED is allowed to
+// draw from - see powerBudgetMa() in power.h, which picks it from whether the
+// board is on USB or on the external supply.
+//
+// This is the only place addLeds() may be called; calling it twice registers
+// the strip twice.
+void graphics_init(uint32_t maxMilliamps) {
 
   FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
   //FastLED.setBrightness(BRIGHTNESS);
-  FastLED.setMaxPowerInVoltsAndMilliamps(5, 5000);
-  // FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
+  FastLED.setMaxPowerInVoltsAndMilliamps(5, (int)maxMilliamps);
   FastLED.clear();
   FastLED.show();
 }
-void graphics_init_test() {
 
-  FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
-  //FastLED.setBrightness(BRIGHTNESS);
-  FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
-  FastLED.clear();
-  FastLED.show();
+// Re-budgets a running panel, for USB being plugged in or pulled out.
+void graphics_set_power_budget(uint32_t maxMilliamps) {
+  FastLED.setMaxPowerInVoltsAndMilliamps(5, (int)maxMilliamps);
 }
 
 void graphics_setup(int hour, int minute) {
@@ -351,47 +358,43 @@ void graphics_loop(int hour, int minute) {
 }
 
 
-void graphics_setup_test(int hour, int minute) {
+// Test mode does not read the clock - it starts at morning and steps through
+// the modes on a timer, so it works with no NTP sync and no network in reach.
+void graphics_setup_test() {
 
+  testModeCounter = 0;
+  currentMode = 1;
   last_season_change = millis();
-  // initialize with current mode immediately
-  currentMode = timeMode(hour, minute);
-  Serial.println();
-  Serial.print(F("Starting with mode: "));
-  Serial.println(currentMode);
 
-  for (int i = 0; i < NUM_LEDS; i++) targetBuf[i] = CRGB::Black;
-  switch (currentMode) {
-    case 1: modeMorning(); break;
-    case 2: modeMidday(); break;
-    case 3: modeAfternoon(); break;
-    case 4: modeEvening(); break;
-    case 5: modeNight(); break;
-  }
-  for (int i = 0; i < NUM_LEDS; i++) { leds[i] = targetBuf[i]; }
-  FastLED.show();
+  Serial.println();
+  Serial.println(F("Test mode: cycling modes"));
+
+  // Crossfading in works from a cleared panel at boot and from whatever the
+  // clock mode was showing when USB got plugged in.
+  setMode(currentMode, TEST_CROSSFADE_MS);
 }
 
 // Cycles through every mode on a timer instead of following the clock.
-void graphics_loop_test(int hour, int minute) {
+void graphics_loop_test() {
   uint32_t currentTime = millis();
-  if (currentTime - last_season_change > MODE_CROSSFADE_MS * 2) {
+  if ((currentTime - last_season_change) > TEST_MODE_DWELL_MS) {
     testModeCounter++;
     last_season_change = currentTime;
   }
 
-  int m = testModeCounter % 6;
+  // 1-5, so the cycle stays inside the real modes rather than passing through
+  // setMode()'s default case.
+  int m = 1 + (testModeCounter % 5);
 
   if (m != currentMode) {
     currentMode = m;
     Serial.print(F("Season: "));
     Serial.println(m);
-    setMode(currentMode, MODE_CROSSFADE_MS);
+    setMode(currentMode, TEST_CROSSFADE_MS);
   }
 
   applyTransition();
   updateDimWaves();
-  // alternateRows(minute, 5);
 
   FastLED.show();
   delay(40);

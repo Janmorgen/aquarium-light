@@ -2,20 +2,23 @@
 
 #include <Arduino.h>
 
-// VBUS sense GPIO for ESP32-WROOM-DA (DA core exposes VBUS_SENSE)
-// If your board variant differs, change this to the correct pin.
-#ifndef VBUS_SENSE_PIN
-#define VBUS_SENSE_PIN GPIO_NUM_19
+// Current budgets handed to FastLED.
+//
+// Test mode is what runs at the bench, off the USB cable. A USB port is good
+// for roughly half an amp, nowhere near enough for 256 pixels, so the panel
+// has to be capped hard there. Normal operation runs off the 5 A supply.
+//
+// Which mode is active comes from the switch in controls.h - see the note
+// there on why this is a switch and not automatic USB detection.
+
+#ifndef TEST_POWER_BUDGET_MA
+#define TEST_POWER_BUDGET_MA 500
+#endif
+#ifndef NORMAL_POWER_BUDGET_MA
+#define NORMAL_POWER_BUDGET_MA 5000
 #endif
 
-// Initialize USB power subsystem (idempotent)
-void initUsbPwr() {
-  pinMode((gpio_num_t)VBUS_SENSE_PIN, INPUT);
-}
-
-// Returns true if USB VBUS is present
-bool checkUsbPower() {
-  // digitalRead returns HIGH when VBUS present if board ties VBUS to pin through divider.
-  int val = digitalRead((gpio_num_t)VBUS_SENSE_PIN);
-  return (val == HIGH);
+// Supply budget for FastLED, in milliamps.
+uint32_t powerBudgetMa(bool testMode) {
+  return testMode ? TEST_POWER_BUDGET_MA : NORMAL_POWER_BUDGET_MA;
 }
