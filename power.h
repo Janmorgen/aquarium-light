@@ -9,8 +9,9 @@
 // has to be capped hard there.
 //
 // Normal operation runs off a 10 A supply. Full white on all 256 pixels wants
-// about 9.2 A, but the cap stays at 8 A: at full power the panel runs too hot,
-// and the remaining 2 A covers the ESP32's Wi-Fi spikes with some margin.
+// about 9.2 A, but the cap is 5 A: at 8 A the bare panel was hot to the touch
+// within minutes. Raise it only once the panel has a heatsink (an aluminium
+// backplate) and power fed in at both ends.
 //
 // Which mode is active comes from the switch in controls.h - see the note
 // there on why this is a switch and not automatic USB detection.
@@ -19,7 +20,7 @@
 #define TEST_POWER_BUDGET_MA 500
 #endif
 #ifndef NORMAL_POWER_BUDGET_MA
-#define NORMAL_POWER_BUDGET_MA 8000
+#define NORMAL_POWER_BUDGET_MA 5000
 #endif
 
 // Supply budget for FastLED, in milliamps.

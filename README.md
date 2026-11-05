@@ -13,7 +13,7 @@ from NTP, so the schedule follows the real clock including DST.
 | WS2812B panel | 8 rows x 32 columns, 256 LEDs |
 | Data pin | GPIO 26 (`DATA_PIN` in `graphics.h`) |
 | Test switch | GPIO 32 to GND (`TEST_SWITCH_PIN` in `controls.h`) |
-| Supply | 5 V 10 A, budgeted at 8 A normally (heat), 500 mA in test mode |
+| Supply | 5 V 10 A, budgeted at 5 A normally (heat - 8 A ran too hot), 500 mA in test mode |
 
 The panel is wired as a **column-major serpentine**: column 0 runs top to
 bottom, column 1 bottom to top, and so on, 8 pixels per column.
@@ -452,7 +452,7 @@ GPIO 32 ---o/ o--- GND        closed = test mode
 
 | Switch | Mode | Current budget |
 | --- | --- | --- |
-| Open | Clock schedule, NTP synced | 8 A |
+| Open | Clock schedule, NTP synced | 5 A |
 | Closed | Cycles every mode on a timer | 500 mA |
 
 Close it when the light is on a bench running off the USB cable: the panel
@@ -475,7 +475,7 @@ about a minute instead of the ten the real 60 s crossfades would take.
 | `TEST_SWITCH_PIN` | `32` | Pin the switch pulls |
 | `TEST_SWITCH_ACTIVE_LEVEL` | `LOW` | Level meaning test mode |
 | `TEST_POWER_BUDGET_MA` | `500` | Cap in test mode |
-| `NORMAL_POWER_BUDGET_MA` | `8000` | Cap on the schedule |
+| `NORMAL_POWER_BUDGET_MA` | `5000` | Cap on the schedule |
 
 GPIO 32 has an internal pull-up and is not a strapping pin, so it is safe to
 hold either way at boot, and an unwired pin reads as "not test mode". Pins
