@@ -95,7 +95,7 @@ const Overlay OVERLAYS[OV_COUNT] = {
   // color                level  col0 col1  row0 row1  shape           peak edge
   { CRGB(60, 100, 255),   57,    0,   31,   0,   7,    SHAPE_FLAT,     255, 255 },  // OV_BLUE_SKY
   { CRGB(220, 210, 200),  100,   10,  21,   0,   7,    SHAPE_FALLOFF,  255, 0   },  // OV_SUN_CORE
-  { CRGB(255, 245, 230),  170,   0,   31,   0,   7,    SHAPE_FLAT,     255, 255 },  // OV_DAY_WHITE
+  { CRGB(255, 245, 230),  255,   0,   31,   0,   7,    SHAPE_FLAT,     255, 255 },  // OV_DAY_WHITE
   { CRGB(255, 245, 230),  45,    8,   23,   0,   7,    SHAPE_FALLOFF,  255, 0   },  // OV_DAY_CROWN
   { CRGB(255, 250, 240),  60,    11,  20,   1,   6,    SHAPE_RADIAL,   255, 0   },  // OV_SUN_SPOT (spare)
   { CRGB(80, 120, 255),   70,    0,   8,    0,   7,    SHAPE_GRADIENT, 255, 0   },  // OV_COOL_EDGE

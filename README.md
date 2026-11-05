@@ -93,11 +93,17 @@ schedule has nothing to follow — the panel stays dark and the control page say
 
 | Mode | Hours | Look |
 | --- | --- | --- |
-| 1 | 07:00-11:59 | Morning — blue accents, warm center band |
-| 2 | 12:00-16:59 | Mid-day — bright white, cool boost on the left |
-| 3 | 17:00-19:59 | Afternoon — warm white, amber boost on the left |
-| 4 | 20:00-20:59 | Evening — deep warm, dimmed |
-| 5 | 21:00-06:59 | Night — off |
+| 1 | 08:30-10:59 | Morning — blue accents, warm center band |
+| 2 | 11:00-16:59 | Mid-day — full white, cool boost on the left |
+| 3 | 17:00-18:59 | Afternoon — warm white, amber boost on the left |
+| 4 | 19:00-19:59 | Evening — deep warm, dimmed |
+| 5 | 20:00-08:29 | Night — off |
+
+That is about 12 hours lit and 12 dark. Mid-day is the plant-growing window:
+its white runs at full level, and the effects that work by darkening are held
+low there (see [Effects](#effects)). The tank holds low-to-medium-light plants
+(Anubias, moneywort, Bacopa caroliniana, Monte Carlo, duckweed), and the long
+night suits its snails, shrimp and pencilfish.
 
 Mode changes crossfade over `MODE_CROSSFADE_MS`, which is 30 minutes - slow
 enough that the tank never visibly steps from one look to the next. The fade is
@@ -220,6 +226,15 @@ The replacement is drawn at random from the effects that are switched on, not
 already seated, and not suppressed to nothing by the current mode. A pinned
 effect is exempt from all of this: an explicit request outranks the rotation.
 
+A scheduled mode change does not re-cast, so when the new mode suppresses a
+seated effect to nothing - `focus` at mid-day - that seat is retired straight
+away rather than at the next rotation, instead of leaving the panel on one
+effect.
+
+Mid-day holds the darkening effects low so the light reaches the plants:
+`waves` and `caustics` are capped at 80, `swell` at 100, `glints` at 120, and
+`focus` is off. `sun` only adds light and keeps its full ceiling.
+
 `effects_prime()` re-casts for the mode, so boot opens on a pair that suits the
 hour rather than one chosen before the clock was known.
 
@@ -260,8 +275,8 @@ stack.
 #### The sun
 
 `sun` is the one effect whose position does not come from a timer. It rides on
-`dayProgress()` from `time_definitions.h`: 0 at `DAY_START_HOUR`, 255 at
-`DAY_END_HOUR`. It enters just off the left edge at dawn, arcs to the top of
+`dayProgress()` from `time_definitions.h`: 0 at `DAY_START_MINUTE` (08:30), 255
+at `DAY_END_MINUTE` (20:00). It enters just off the left edge at dawn, arcs to the top of
 the panel around the middle of the day, and leaves off the right edge at dusk.
 
 ```
@@ -273,7 +288,7 @@ the panel around the middle of the day, and leaves off the right edge at dusk.
 ```
 
 Its strength still runs through the usual envelope, so it fades in and out with
-the day rather than appearing at 07:00.
+the day rather than appearing at 08:30.
 
 #### The focus rectangle
 
@@ -298,8 +313,8 @@ when the effect fades back in.
 
 It is also the one rare effect: a `chance` of 40 means only about one stretch in
 six turns it on, but the stretches are long and consecutive ones chain. Measured
-across three simulated days, it is present for 13% of lit hours across seven
-spells, the longest of them a little over two hours - while the other five
+across three simulated days - before mid-day suppressed it - it was present for
+13% of lit hours across seven spells, the longest of them a little over two hours - while the other five
 effects run continuously and simply wander.
 
 ### Parameters

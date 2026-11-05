@@ -421,14 +421,19 @@ uint8_t rollLevel(const EffectSpec& fx) {
 // from somewhere. The cast provides it now - a seat is one effect in six - so
 // these are all 255: an effect that has been given a seat should use it, not
 // roll a zero and leave the panel running on one.
+//
+// Mid-day is the plant-growing window, so the effects that work by darkening -
+// waves, caustics, swell, and focus dimming everything outside its rectangle -
+// are held low there or kept off, and the light reaches the plants. The sun
+// only adds light and keeps its full ceiling.
 const EffectSpec EFFECTS[] = {
   // name        apply        level    odds   hold (s)     ramp   ceiling per mode
-  { "waves",     fxDimWaves,  110, 255, 255,   600, 1800,   900,  { 0, 200, 255, 220, 140, 0 } },
-  { "caustics",  fxCaustics,   60, 230, 255,   900, 2400,  1500,  { 0, 170, 255, 200,  90, 0 } },
-  { "swell",     fxSwell,      80, 255, 255,  1200, 3000,  2400,  { 0, 255, 180, 220, 255, 0 } },
-  { "glints",    fxGlints,      0, 200, 255,   720, 2100,  1200,  { 0, 120, 255, 160,  60, 0 } },
+  { "waves",     fxDimWaves,  110, 255, 255,   600, 1800,   900,  { 0, 200,  80, 220, 140, 0 } },
+  { "caustics",  fxCaustics,   60, 230, 255,   900, 2400,  1500,  { 0, 170,  80, 200,  90, 0 } },
+  { "swell",     fxSwell,      80, 255, 255,  1200, 3000,  2400,  { 0, 255, 100, 220, 255, 0 } },
+  { "glints",    fxGlints,      0, 200, 255,   720, 2100,  1200,  { 0, 120, 120, 160,  60, 0 } },
   { "sun",       fxSun,       150, 255, 255,   900, 2700,  1800,  { 0, 255, 255, 220, 120, 0 } },
-  { "focus",     fxFocus,     130, 200, 255,  1800, 3600,  1200,  { 0,  80, 120, 110, 150, 0 } },
+  { "focus",     fxFocus,     130, 200, 255,  1800, 3600,  1200,  { 0,  80,   0, 110, 150, 0 } },
 };
 
 #define EFFECT_COUNT ARRAY_LEN(EFFECTS)
@@ -597,6 +602,21 @@ int8_t pickCandidate(int mode) {
   return (int8_t)pool[random(n)];
 }
 
+// A seat whose occupant this mode suppresses to nothing, or -1. A scheduled
+// mode change does not re-cast, so without this an effect the new mode turns
+// off would sit in its seat at zero until a rotation happened to pick that
+// seat - leaving the panel on one effect for up to the full rotation interval.
+// A pinned effect is an explicit request and is left alone.
+int8_t suppressedSeat(int mode) {
+  uint8_t m = (mode >= 0 && mode < NUM_MODES) ? mode : 0;
+  for (uint8_t s = 0; s < EFFECT_SEATS; ++s) {
+    int8_t occ = castSeat[s];
+    if (occ < 0 || effectState[occ].override >= 0) continue;
+    if (EFFECTS[occ].modeCeiling[m] == 0) return (int8_t)s;
+  }
+  return -1;
+}
+
 uint32_t rollRotation() {
   return (uint32_t)random(ROTATION_MIN_SEC, ROTATION_MAX_SEC + 1) * 1000UL;
 }
@@ -691,12 +711,15 @@ void effects_loop(int mode, uint8_t dayProgress) {
       incomingEffect = -1;
       nextRotationMs = effectsClock + rollRotation();
     }
-  } else if ((int32_t)(effectsClock - nextRotationMs) >= 0) {
-    int8_t next = pickCandidate(mode);
+  } else {
+    // A suppressed occupant is retired now, not at the next rotation.
+    int8_t deadSeat = suppressedSeat(mode);
+    bool due = (int32_t)(effectsClock - nextRotationMs) >= 0;
+    int8_t next = (deadSeat >= 0 || due) ? pickCandidate(mode) : -1;
     if (next < 0) {
-      nextRotationMs = effectsClock + rollRotation();   // nothing to swap in
+      if (due) nextRotationMs = effectsClock + rollRotation();   // nothing to swap in
     } else {
-      retiringSeat = (int8_t)random(EFFECT_SEATS);
+      retiringSeat = (deadSeat >= 0) ? deadSeat : (int8_t)random(EFFECT_SEATS);
       incomingEffect = next;
       int8_t leaving = castSeat[retiringSeat];
       if (leaving >= 0) effectState[leaving].rampOverride = ROTATION_FADE_SEC;
