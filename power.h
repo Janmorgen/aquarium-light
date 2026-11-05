@@ -9,9 +9,9 @@
 // has to be capped hard there.
 //
 // Normal operation runs off a 10 A supply. Full white on all 256 pixels wants
-// about 9.2 A, but the cap is 5 A: at 8 A the bare panel was hot to the touch
-// within minutes. Raise it only once the panel has a heatsink (an aluminium
-// backplate) and power fed in at both ends.
+// about 9.2 A, but the cap is 7 A: at 8 A the bare panel was hot to the touch
+// within minutes. Watch the heat at 7 A too; a heatsink (an aluminium
+// backplate) and power fed in at both ends are what make more safe.
 //
 // Which mode is active comes from the switch in controls.h - see the note
 // there on why this is a switch and not automatic USB detection.
@@ -20,7 +20,7 @@
 #define TEST_POWER_BUDGET_MA 500
 #endif
 #ifndef NORMAL_POWER_BUDGET_MA
-#define NORMAL_POWER_BUDGET_MA 5000
+#define NORMAL_POWER_BUDGET_MA 7000
 #endif
 
 // Supply budget for FastLED, in milliamps.

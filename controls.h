@@ -43,7 +43,7 @@ void setTestModeRequest(bool on) {
 //
 // A switch or jumper shorting TEST_SWITCH_PIN to GND selects test mode: the
 // panel cycles the modes on a timer at a current a USB port can supply,
-// instead of following the clock at the full 5 A budget.
+// instead of following the clock at the full 7 A budget.
 //
 //   GPIO 32 ---o/ o--- GND        closed = test mode
 //
