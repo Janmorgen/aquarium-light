@@ -6,6 +6,17 @@
 
 #include "secrets.h"
 
+// Wi-Fi, NTP, and the clock.
+//
+// The radio used to come up once at boot, sync the clock and go straight back
+// to WIFI_OFF. It now stays up: the light is reachable for wireless flashing
+// and for the control page, neither of which can work through a window that
+// closes. That costs roughly 80 mA continuously - acceptable on a 5 A supply,
+// and the reason the daily re-sync no longer has to bring the radio back.
+//
+// Nothing here blocks forever. A light that will not turn on because the router
+// is rebooting is worse than a light running on yesterday's clock.
+
 const char* ssid = WIFI_SSID;
 const char* password = WIFI_PASSWORD;
 
@@ -14,40 +25,110 @@ const char* ntp2 = "pool.ntp.org";
 
 const char* tzInfo = TZ_INFO;
 
+// How long to wait for the association at boot, and how often to retry after
+// the link drops.
+#ifndef WIFI_CONNECT_TIMEOUT_MS
+#define WIFI_CONNECT_TIMEOUT_MS 20000
+#endif
+#ifndef WIFI_RETRY_INTERVAL_MS
+#define WIFI_RETRY_INTERVAL_MS 30000
+#endif
+
+static uint32_t wifiLastAttempt = 0;
+static uint32_t wifiDropouts = 0;
+static bool wifiWasConnected = false;
+
 bool isWifiConnected() {
   return (WiFi.status() == WL_CONNECTED);
 }
 
-void connectWiFi() {
-  // Put Wi-Fi in station mode so ESP32 connects to a router
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-
-  // Wait until Wi-Fi connection is established
-  while (!isWifiConnected()) {
-    delay(500);
+// Applies the static address from secrets.h, if one is defined. Without it the
+// board takes a DHCP lease - give it a reservation on the router, or its
+// address will move.
+void applyStaticIp() {
+#ifdef NET_STATIC_IP
+  IPAddress ip, gateway, subnet, dns;
+  ip.fromString(NET_STATIC_IP);
+  gateway.fromString(NET_GATEWAY);
+  subnet.fromString(NET_SUBNET);
+#ifdef NET_DNS
+  dns.fromString(NET_DNS);
+#else
+  dns = gateway;
+#endif
+  if (!WiFi.config(ip, gateway, subnet, dns)) {
+    Serial.println(F("Static IP config rejected, falling back to DHCP"));
   }
+#endif
 }
 
-void disconnectWiFi() {
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
+// Starts the association. Does not wait for it.
+void wifiBegin() {
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);       // OTA and the web server want a responsive radio
+  WiFi.setAutoReconnect(true);
+  applyStaticIp();
+  WiFi.begin(ssid, password);
+  wifiLastAttempt = millis();
 }
 
-void syncTime() {
-  // Start NTP using the two servers above
+// Waits up to timeoutMs for the link. Returns whether it came up.
+bool wifiWaitConnected(uint32_t timeoutMs) {
+  uint32_t started = millis();
+  while (!isWifiConnected()) {
+    if ((millis() - started) >= timeoutMs) return false;
+    delay(100);
+  }
+  return true;
+}
+
+// Re-associates after a dropout. Call from loop(); costs nothing while the
+// link is up.
+void wifiMaintain() {
+  if (isWifiConnected()) {
+    if (!wifiWasConnected) {
+      wifiWasConnected = true;
+      Serial.print(F("Wi-Fi up at "));
+      Serial.println(WiFi.localIP().toString().c_str());
+    }
+    return;
+  }
+
+  if (wifiWasConnected) {
+    wifiWasConnected = false;
+    wifiDropouts++;
+    Serial.println(F("Wi-Fi lost, retrying in the background"));
+  }
+
+  if ((millis() - wifiLastAttempt) < WIFI_RETRY_INTERVAL_MS) return;
+  wifiLastAttempt = millis();
+  WiFi.disconnect();
+  WiFi.begin(ssid, password);
+}
+
+uint32_t wifiDropoutCount() {
+  return wifiDropouts;
+}
+
+// Asks NTP for the time and waits up to timeoutMs for an answer. Returns
+// whether the clock ended up set.
+//
+// 1577836800 is the Unix time for Jan 1, 2020 - anything below it means the
+// clock is still at the epoch and NTP has not answered.
+bool syncTime(uint32_t timeoutMs) {
+  if (!isWifiConnected()) return false;
+
   configTime(0, 0, ntp1, ntp2);
-
-  // Set the timezone for your region
   setenv("TZ", tzInfo, 1);
   tzset();
 
-  // Wait until a valid time is received from the NTP server
-  // 1577836800 is the Unix time for Jan 1, 2020
+  uint32_t started = millis();
   time_t now = 0;
   while (time(&now) < 1577836800) {
-    delay(500);
+    if ((millis() - started) >= timeoutMs) return false;
+    delay(200);
   }
+  return true;
 }
 
 // Function that prints formatted date and time

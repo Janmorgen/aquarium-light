@@ -1,141 +1,77 @@
-# Plan: wireless (OTA) flashing
+# Wireless (OTA) flashing — implemented
 
-**Status:** proposed, not implemented. Nothing in this document has been built
-or tested on hardware.
+**Status:** built and verified on hardware, 2026-08-26. An image was compiled,
+pushed over the network to a board that was never touched, and came back up
+serving its control page. The procedure lives in the README; this file records
+what the plan got right, what it got wrong, and the decisions taken.
 
-**Goal:** flash new firmware to the aquarium light from the Raspberry Pi
-without physically retrieving the board and connecting USB.
+## The two open decisions
 
-Verdict: feasible, but it is an architecture change rather than a library
-addition, and it does not remove the need for a compiler.
+### Decision 1: when is the radio up? — **always on**
 
-## Why this isn't just adding a library
+The plan recommended a boot window and called always-on "the biggest
+behavioural change". That recommendation was overtaken: the light also has to
+be controllable and monitorable over Wi-Fi, and neither works through a window
+that closes. A boot window would have meant power-cycling the tank light to
+change its brightness.
 
-### 1. The radio is deliberately off
+So the radio stays up, at roughly 80 mA continuous. What the plan listed as the
+cost of always-on — that the daily re-sync logic becomes redundant — turned out
+to be a simplification rather than a loss: `syncTime()` no longer has to bring
+the radio back, it just asks.
 
-`aquarium-light.ino:32` calls `disconnectWiFi()` immediately after the boot NTP
-sync, and `wifi_helpers.h:34` takes the radio all the way to `WIFI_OFF`. It
-returns for a few seconds during the daily midnight re-sync
-(`aquarium-light.ino:62-64`) and at no other time.
+The plan's other worry, that always-on is a permanent listener on the LAN, is
+real and unchanged. Both listeners are password-protected.
 
-An OTA listener is therefore unreachable ~99.99% of the time. Making the device
-reachable is the substance of this work; wiring up the OTA library itself is
-the easy part.
+### Decision 2: does the Pi build, or only flash? — **unchanged, still open**
 
-### 2. OTA transports a binary, it does not produce one
+Nothing here forces it. `espota.py` is ~10 KB and pushes an image built
+elsewhere; a local core is ~1 GB and builds too. The device end is identical
+either way.
 
-There is no ESP32 core installed on the Pi — the current Espressif 3.x core
-needs ~7-8 GB and does not fit on this SD card (see README, "A note on disk
-space"). `tools/typecheck/check.sh` deliberately cannot emit a binary.
+## What the plan got wrong
 
-So something must still compile the firmware. See "What the Pi needs" below.
+- **Step 5 said the image "is expected to land well under" the ~1.2 MB slot,
+  marked unverified.** It does fit — 1.13 MB, 86% — but 86% is not "well
+  under", and that is with the default scheme's 1.2 MB slots.
 
-### 3. One more USB flash is unavoidable
+  The scheme is now pinned to `no_fs` (2 MB app x2, no filesystem) in
+  `sketch.yaml`, which puts the same image at 55%. **This decision cannot be
+  deferred.** The partition table is written at `0x8000` by esptool and OTA only
+  ever writes the inactive app slot, so the scheme is the one thing a wireless
+  push can never change. There is exactly one mandatory USB flash — that is
+  when to get it right.
 
-The first OTA-capable image has to arrive over the wire. Plan on retrieving the
-board once more.
+- **Step 4 preferred a static IP over mDNS, on reliability grounds.** Static
+  addressing is supported (`NET_STATIC_IP` in `secrets.h`, commented out) and is
+  still the recommendation. But `ArduinoOTA.begin()` starts mDNS regardless —
+  it registers its own service — so avoiding mDNS was never actually on the
+  table. Verified on DHCP.
 
-## Open decisions
+- **"Consider dimming the panel while an OTA is in progress"** was listed under
+  Risks as optional. It is not really optional and it is not really a choice:
+  `ArduinoOTA.handle()` blocks until the upload finishes, so the render loop
+  stops on its own. `ota.h` draws a progress bar from the progress callback,
+  which is the only code still running.
 
-Both need answering before implementation starts.
+## What the plan got right
 
-### Decision 1: when is the radio up?
+- Wiring up the library was the easy part; making the device reachable was the
+  substance.
+- One USB flash was unavoidable.
+- The window timer had to be `uint32_t` — moot now that there is no window.
+- Extending `tools/typecheck/stubs/` kept the type-check working. It needed
+  `ArduinoOTA.h`, `WebServer.h`, a `String`, and additions to `WiFi.h`.
 
-| Option | Cost | Flashing workflow |
-| --- | --- | --- |
-| **Boot window** (recommended) | One power cycle per flash | Power-cycle the light, push within ~5 min |
-| **Always on** | ~80 mA continuous, permanently changes the power profile of a device sitting over water | Flash anytime |
-| **Night window** | None — the panel is already off | Flash only between 21:00 and 07:00 |
+## Verification performed
 
-The boot window preserves the current power behaviour and the author's original
-intent in turning the radio off, at the cost of a power cycle. Always-on is the
-most convenient and also makes the daily re-sync logic redundant, but it is the
-biggest behavioural change.
-
-### Decision 2: does the Pi build, or only flash?
-
-| Approach | Disk | Capability |
-| --- | --- | --- |
-| Install `arduino:esp32@2.0.18-arduino.5` | ~1 GB of the 5.0 GB free | Build **and** flash from the Pi |
-| Keep only `espota.py` | ~10 KB | Flash only; build elsewhere |
-
-`espota.py` is a standalone, dependency-free Python script, so push-only OTA is
-essentially free in disk terms. Building on the Pi requires the core.
-
-Core 2.0.18 is IDF 4.4-based. This sketch uses only WiFi, NTP and FastLED, none
-of which differ meaningfully from 3.x here.
-
-## Implementation
-
-Assuming the boot window and a local core, in order:
-
-1. **Add OTA credentials to secrets.** New `OTA_PASSWORD` and `OTA_HOSTNAME` in
-   `secrets.h.example`, mirrored into the local `secrets.h`. The device sits on
-   the LAN; an unauthenticated OTA endpoint is not acceptable.
-
-2. **New `ota.h`**, following the existing header conventions (`#pragma once`,
-   `<Arduino.h>`, no include guards missing). Wraps `ArduinoOTA` — which ships
-   with the ESP32 core, so no extra library dependency:
-   - `ota_begin()` — set hostname, set password, register handlers, `begin()`
-   - `ota_handle()` — cheap, safe to call every frame
-   - Serial logging on start/end/error, matching the existing log style
-
-3. **Add an OTA window to the sketch.** Keep Wi-Fi up after the boot sync
-   rather than calling `disconnectWiFi()` immediately; run `ota_handle()` from
-   `loop()`; drop the radio once the window expires. The window duration
-   belongs next to the other tunables in `graphics.h`, or in a new config
-   header if that feels like the wrong home.
-
-   The window timer must use `uint32_t` — see the `millis()` overflow class of
-   bug already fixed in this repo.
-
-4. **Static IP rather than mDNS.** This Pi runs DNS for the network, and mDNS
-   discovery is the least reliable part of an ESP32 OTA setup. A static lease
-   or static IP in `secrets.h` avoids an entire category of "why can't I find
-   the board" debugging.
-
-5. **Confirm the image fits.** The default classic-ESP32 partition scheme
-   provides two app slots, so OTA works without repartitioning, but the image
-   must fit the ~1.2 MB slot. FastLED + Wi-Fi + OTA is expected to land well
-   under that. **Unverified** — needs a real compiler to measure.
-
-6. **Update the README** with the OTA flashing procedure and the window
-   behaviour, and extend `tools/typecheck/stubs/` with `ArduinoOTA.h` so the
-   type-check keeps working without a toolchain.
-
-## Risks
-
-- **A bad image soft-bricks the light.** Recovery is a USB flash. Keep the
-  board physically accessible; do not seal the enclosure. ESP32 rollback is
-  worth investigating but is not a substitute for physical access.
-- **Flashing mid-animation.** OTA during an active crossfade leaves the panel
-  in whatever state it was in until reboot. Cosmetic only.
-- **The window is a small attack surface on the LAN.** Password-protected and
-  time-boxed, but it is a real listener. Another reason to prefer the boot
-  window over always-on.
-- **Power draw during OTA.** Wi-Fi TX current spikes on top of 256 LEDs. The
-  5 A budget in `graphics_init()` should absorb it, but a brownout mid-write is
-  the worst possible time for one. Consider dimming the panel while an OTA is
-  in progress.
-
-## Verification
-
-Nothing here is proven. In order:
-
-1. `tools/typecheck/check.sh` passes with the OTA code in place
-2. Sketch compiles for `esp32:esp32:esp32da`, image fits the app slot
-3. USB flash of the OTA-capable firmware succeeds
-4. Board is reachable at its static IP during the window, and unreachable after
-5. An OTA push succeeds and the light comes back up in the correct mode
-6. A deliberately interrupted OTA does not brick the board
-
-## Prior art
-
-The original code carried commented-out `ESPAsyncWebServer` and `ElegantOTA`
-includes and a partial "keep Wi-Fi up when minute >= 30" block, so this was
-attempted before. Those comments were removed when the sketch was rewritten;
-they are recoverable from `~/aquarium-light-original-history.bundle`.
-
-ElegantOTA gives a browser upload UI but pulls in a web server and costs more
-flash and RAM. `ArduinoOTA` is push-based, ships with the core, and matches
-"flash it from the Pi" better. Worth revisiting only if a browser UI is wanted.
+1. `tools/typecheck/check.sh` passes — yes
+2. Compiles for `esp32:esp32:esp32da`, image fits — yes, 55% of a 2 MB slot
+3. USB flash of the OTA-capable firmware — yes
+4. Board reachable at its address — yes, and it stays reachable, which is now
+   the point rather than something to avoid
+5. An OTA push succeeds and the light comes back in the correct mode — yes;
+   uptime reset to 0, clock re-synced, mode restored
+6. A deliberately interrupted OTA does not brick the board — **not tested.**
+   The two app slots make this survivable by design (a failed write leaves the
+   running slot untouched), but it has not been proven on this board.

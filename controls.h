@@ -1,6 +1,43 @@
 #pragma once
 
 #include <Arduino.h>
+#include <time_definitions.h>
+
+// How the light is told what to do: the physical switch, and the overrides the
+// control page sets over Wi-Fi.
+//
+// An override is a deliberate departure from the schedule, so each one is
+// explicitly "off" by default and says so in the status. Nothing here decides
+// anything - the sketch reads these and resolves them into a mode.
+
+// 0 follows the clock; 1-5 pin the light to that mode.
+int modeOverride = 0;
+
+// Master brightness, applied by FastLED before its power limiting.
+uint8_t masterBrightness = 255;
+
+// The remote equivalent of closing the test switch.
+bool testModeRequest = false;
+
+// Set whenever an override changes, so the sketch can cross-fade a commanded
+// change in seconds instead of the scheduled half hour.
+bool controlsChanged = false;
+
+void setModeOverride(int mode) {
+  modeOverride = (mode >= 0 && mode < NUM_MODES) ? mode : 0;
+  controlsChanged = true;
+}
+
+void setMasterBrightness(uint8_t value) {
+  masterBrightness = value;
+  controlsChanged = true;
+}
+
+void setTestModeRequest(bool on) {
+  testModeRequest = on;
+  controlsChanged = true;
+}
+
 
 // Test mode switch.
 //

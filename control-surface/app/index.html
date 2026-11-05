@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aquarium light</title>
+<style>
+:root{
+  color-scheme: light;
+  --surface-0:#f4f3f0; --surface-1:#fcfcfb; --line:#e2e0da;
+  --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#75736c;
+  /* categorical slots 1-5, validated for this surface */
+  --mode-1:#2a78d6; --mode-2:#eb6834; --mode-3:#1baf7a; --mode-4:#eda100; --mode-5:#e87ba4;
+  --series-1:#2a78d6;
+  --status-good:#0ca30c; --status-critical:#d03b3b; --status-warning:#fab219;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  color-scheme: dark;
+  --surface-0:#111110; --surface-1:#1a1a19; --line:#33332f;
+  --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8f8e85;
+  --mode-1:#3987e5; --mode-2:#d95926; --mode-3:#199e70; --mode-4:#c98500; --mode-5:#d55181;
+  --series-1:#3987e5;
+}}
+*{box-sizing:border-box}
+body{margin:0;padding:20px;background:var(--surface-0);color:var(--text-primary);
+  font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif}
+.wrap{max-width:1040px;margin:0 auto}
+header{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+h1{font-size:19px;margin:0;font-weight:600}
+#conn{font-size:13px;color:var(--text-secondary)}
+.card{background:var(--surface-1);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;margin-bottom:14px}
+.card h2{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--text-muted);margin:0 0 12px;font-weight:600}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px}
+.kpi{background:var(--surface-0);border-radius:8px;padding:10px 12px}
+.kpi b{display:block;font-size:11px;font-weight:500;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.kpi .v{font-size:20px;font-variant-numeric:tabular-nums;line-height:1.2}
+.kpi .sub{font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.kpi svg{display:block;margin-top:4px}
+canvas#panel{width:100%;image-rendering:pixelated;border-radius:6px;
+  background:#000;display:block;aspect-ratio:4/1}
+canvas#panel.painting{cursor:crosshair;outline:2px solid var(--series-1);outline-offset:2px}
+input[type=color]{width:38px;height:34px;padding:2px;background:var(--surface-0);
+  border:1px solid var(--line);border-radius:7px;cursor:pointer}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{background:var(--surface-0);color:var(--text-primary);border:1px solid var(--line);
+  border-radius:7px;padding:7px 12px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--series-1)}
+button.on{background:var(--series-1);border-color:var(--series-1);color:#fff;font-weight:600}
+input[type=range]{flex:1;min-width:150px;accent-color:var(--series-1)}
+label.f{min-width:74px;color:var(--text-secondary);font-size:13px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);
+  margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;
+  vertical-align:-1px}
+.fx{display:grid;grid-template-columns:74px 1fr 36px 60px 46px;gap:6px;align-items:center;
+  margin-bottom:3px;font-size:13px}
+.fxrow{padding:6px 0;border-bottom:1px solid var(--line)}
+.fxrow:last-child{border-bottom:none}
+.fxrow.seated{background:linear-gradient(90deg,color-mix(in srgb,var(--series-1) 9%,transparent),transparent);
+  border-radius:6px}
+.params{display:flex;gap:10px;flex-wrap:wrap;padding:2px 0 0 74px;font-size:12px;
+  color:var(--text-muted)}
+.params label{display:flex;align-items:center;gap:4px}
+.params input{width:52px;background:var(--surface-0);color:var(--text-primary);
+  border:1px solid var(--line);border-radius:5px;padding:2px 5px;font:inherit;
+  font-variant-numeric:tabular-nums}
+.seatmark{color:var(--series-1);font-weight:700}
+.bar{height:8px;background:var(--surface-0);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--series-1);border-radius:4px}
+.warnpill{color:var(--status-critical);font-weight:600}
+table.tv{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;
+  font-variant-numeric:tabular-nums}
+table.tv th,table.tv td{text-align:left;padding:3px 8px 3px 0;color:var(--text-secondary)}
+table.tv th{color:var(--text-muted);font-weight:500}
+details summary{cursor:pointer;font-size:12px;color:var(--text-muted);margin-top:8px}
+#tip{position:fixed;pointer-events:none;opacity:0;background:var(--surface-1);
+  border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:12px;
+  box-shadow:0 4px 14px rgba(0,0,0,.18);transition:opacity .1s;z-index:9}
+.overflow{overflow-x:auto}
+</style></head>
+<body><div class="wrap">
+
+<header><h1>Aquarium light</h1><span id="conn"></span></header>
+
+<div class="card"><h2>Panel now</h2>
+  <canvas id="panel" width="32" height="8"></canvas>
+  <div class="row" style="margin-top:10px">
+    <button id="paintmode">Paint pixels</button>
+    <input type="color" id="paintcol" value="#ff8800" title="Paint colour">
+    <button id="erase">Erase</button>
+    <button id="fill">Fill all</button>
+    <button id="clearpx">Clear overrides</button>
+    <span id="pxnote" style="font-size:13px;color:var(--text-secondary)"></span>
+  </div>
+  <div class="kpis" id="kpis" style="margin-top:12px"></div>
+</div>
+
+<div class="card"><h2>Control</h2>
+  <div class="row" id="modes"></div>
+  <div class="row" style="margin-top:10px">
+    <label class="f">Brightness</label>
+    <input type="range" id="bright" min="0" max="255">
+    <span id="brightv" style="width:32px;text-align:right;font-variant-numeric:tabular-nums"></span>
+  </div>
+  <div class="row" style="margin-top:10px" id="focusrow"></div>
+  <div class="row" style="margin-top:10px">
+    <button id="test">Test mode</button><button id="resync">Re-sync clock</button>
+  </div>
+</div>
+
+<div class="card"><h2>Effects</h2>
+  <div style="font-size:12px;color:var(--text-muted);margin:-4px 0 8px">
+    <span class="seatmark">\u25cf</span> on stage — at most two run at once, rotating every 7–18 min
+  </div>
+  <div id="fx"></div></div>
+
+<div class="card"><h2>History</h2>
+  <div class="row" id="ranges"></div>
+  <div style="margin-top:14px">
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:5px">Mode</div>
+    <div class="overflow"><svg id="timeline" height="46" style="width:100%;display:block"></svg></div>
+    <div class="legend" id="tllegend"></div>
+  </div>
+  <div class="kpis" id="sparks" style="margin-top:16px"></div>
+  <details><summary>Table view</summary><div class="overflow"><table class="tv" id="tv"></table></div></details>
+</div>
+
+</div><div id="tip"></div>
+<script>
+const MODES=['Auto','Morning','Mid-day','Afternoon','Evening','Night'];
+const MODE_VAR=[null,'--mode-1','--mode-2','--mode-3','--mode-4','--mode-5'];
+const STOPS=['Left','Middle','Right'];
+let st={},hist=[],hours=24;
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const tip=document.getElementById('tip');
+const showTip=(e,html)=>{tip.innerHTML=html;tip.style.opacity=1;
+  tip.style.left=Math.min(e.clientX+12,innerWidth-190)+'px';tip.style.top=(e.clientY+14)+'px'};
+const hideTip=()=>tip.style.opacity=0;
+const post=p=>fetch(p,{method:'POST'}).then(r=>{if(r.status===401)alert('Device rejected the credentials');return r});
+const hhmm=t=>new Date(t*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+
+/* ---- controls ---- */
+document.getElementById('modes').innerHTML=MODES.map((m,i)=>`<button data-mode="${i}">${m}</button>`).join('');
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>post('/api/mode?set='+b.dataset.mode).then(refresh));
+document.getElementById('focusrow').innerHTML='<label class="f">Focus</label>'+
+  STOPS.map((n,i)=>`<button data-stop="${i}">${n} 1 min</button>`).join('');
+document.querySelectorAll('[data-stop]').forEach(b=>b.onclick=()=>
+  post('/api/focus?stop='+b.dataset.stop+'&hold=60').then(refresh));
+const bright=document.getElementById('bright');
+bright.oninput=()=>document.getElementById('brightv').textContent=bright.value;
+bright.onchange=()=>post('/api/brightness?set='+bright.value);
+document.getElementById('test').onclick=()=>post('/api/test?set='+(st.testRequest?0:1)).then(refresh);
+document.getElementById('resync').onclick=()=>post('/api/resync').then(refresh);
+document.getElementById('ranges').innerHTML=[['1h',1],['6h',6],['24h',24],['7d',168]]
+  .map(([l,h])=>`<button data-h="${h}">${l}</button>`).join('');
+document.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{hours=+b.dataset.h;loadHistory()});
+
+/* ---- per-pixel painting ----
+   Pinned pixels are held against the live frame; everything not painted keeps
+   animating underneath, so a few pixels read as an annotation on the
+   animation rather than replacing it. */
+let painting=false,erasing=false,drag=false;
+const panelEl=document.getElementById('panel');
+const paintBtn=document.getElementById('paintmode');
+const eraseBtn=document.getElementById('erase');
+
+function setPaint(on){painting=on;panelEl.classList.toggle('painting',on);
+  paintBtn.classList.toggle('on',on);}
+paintBtn.onclick=()=>setPaint(!painting);
+eraseBtn.onclick=()=>{erasing=!erasing;eraseBtn.classList.toggle('on',erasing);
+  if(erasing)setPaint(true)};
+document.getElementById('clearpx').onclick=()=>post('/api/pixels?clear=1').then(refresh);
+document.getElementById('fill').onclick=()=>{
+  const c=document.getElementById('paintcol').value.slice(1);
+  fetch('/api/pixels',{method:'POST',headers:{'Content-Type':'text/plain'},
+    body:c.repeat(256)}).then(refresh);
+};
+
+function cellAt(e){
+  const r=panelEl.getBoundingClientRect();
+  const col=Math.floor((e.clientX-r.left)/r.width*32);
+  const row=Math.floor((e.clientY-r.top)/r.height*8);
+  if(col<0||col>31||row<0||row>7)return null;
+  return {col,row};
+}
+function paintAt(e){
+  if(!painting)return;
+  const c=cellAt(e);if(!c)return;
+  const q=erasing?`/api/pixel?col=${c.col}&row=${c.row}&release=1`
+    :`/api/pixel?col=${c.col}&row=${c.row}&rgb=${document.getElementById('paintcol').value.slice(1)}`;
+  post(q);
+}
+panelEl.addEventListener('mousedown',e=>{drag=true;paintAt(e)});
+panelEl.addEventListener('mousemove',e=>{if(drag)paintAt(e)});
+addEventListener('mouseup',()=>{drag=false});
+panelEl.addEventListener('contextmenu',e=>{if(painting)e.preventDefault()});
+
+/* ---- live ---- */
+const ctx=document.getElementById('panel').getContext('2d');
+function drawFrame(hex){
+  if(hex.length<1536)return;
+  const img=ctx.createImageData(32,8);
+  for(let i=0;i<256;i++){
+    img.data[i*4]=parseInt(hex.substr(i*6,2),16);
+    img.data[i*4+1]=parseInt(hex.substr(i*6+2,2),16);
+    img.data[i*4+2]=parseInt(hex.substr(i*6+4,2),16);
+    img.data[i*4+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+}
+function spark(vals,w=132,h=22){
+  if(vals.length<2)return '';
+  const lo=Math.min(...vals),hi=Math.max(...vals),span=(hi-lo)||1;
+  const pts=vals.map((v,i)=>`${(i/(vals.length-1)*w).toFixed(1)},${(h-2-(v-lo)/span*(h-4)).toFixed(1)}`);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${pts.join(' ')}"
+    fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+function kpi(label,value,sub,sparkHtml){
+  return `<div class="kpi"><b>${label}</b><div class="v">${value}</div>`+
+         (sub?`<div class="sub">${sub}</div>`:'')+(sparkHtml||'')+'</div>';
+}
+function renderLive(){
+  const up=st.reachable!==false;
+  document.getElementById('conn').innerHTML=up
+    ? `<span style="color:var(--status-good)">●</span> reachable · polled every 10s`
+    : `<span class="warnpill">▲ unreachable</span> — last known state shown`;
+  if(!up){document.getElementById('kpis').innerHTML=kpi('Status','<span class="warnpill">Offline</span>','no answer from the light');return}
+
+  document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('on',+b.dataset.mode===st.modeOverride));
+  document.querySelectorAll('[data-stop]').forEach(b=>b.classList.toggle('on',st.focusCommanded&&+b.dataset.stop===st.focusStop));
+  document.getElementById('test').classList.toggle('on',st.testMode);
+  document.getElementById('pxnote').textContent=st.pixelOverrides
+    ? `${st.pixelOverrides} pixel${st.pixelOverrides===1?'':'s'} pinned`
+    : (painting?'click or drag the panel':'');
+  if(document.activeElement!==bright){bright.value=st.brightness;
+    document.getElementById('brightv').textContent=st.brightness}
+
+  const num=k=>hist.filter(h=>h.up).map(h=>h[k]).filter(v=>v!=null);
+  const clock=st.clockSynced?`${String(st.hour).padStart(2,'0')}:${String(st.minute).padStart(2,'0')}`
+    :'<span class="warnpill">no clock</span>';
+  document.getElementById('kpis').innerHTML=[
+    kpi('Mode',MODES[st.mode]||st.mode, st.modeOverride?'pinned by hand':'on schedule'),
+    kpi('Device time',clock, st.transitionPercent<100?`fading · ${st.transitionPercent}%`:'settled'),
+    kpi('Brightness',st.brightness,`${st.budgetMa} mA budget`,spark(num('brightness'))),
+    kpi('Frame rate',st.fps+' fps','render loop',spark(num('fps'))),
+    kpi('Signal',st.rssi+' dBm',`${st.dropouts} drop${st.dropouts===1?'':'s'}`,spark(num('rssi'))),
+    kpi('Uptime',Math.floor(st.uptimeSec/3600)+'h '+Math.floor(st.uptimeSec/60)%60+'m',
+        `${(st.heapFree/1024).toFixed(0)} KB free`)
+  ].join('');
+
+  document.getElementById('fx').innerHTML=(st.effects||[]).map((e,i)=>
+    `<div class="fxrow${e.cast?' seated':''}">
+     <div class="fx"><span style="color:var(--text-secondary)">${e.name}${e.cast?' <span class="seatmark">\u25cf</span>':''}</span>
+     <span class="bar"><i style="width:${e.level*100/255}%"></i></span>
+     <span style="text-align:right;font-variant-numeric:tabular-nums">${e.level}</span>
+     <button data-fx="${i}">${e.override<0?'auto':'pinned'}</button>
+     <button data-en="${i}" class="${e.enabled?'on':''}">${e.enabled?'on':'off'}</button></div>
+     <div class="params">${(e.params||[]).map((p,n)=>
+       `<label>${p.name}<input type="number" min="0" max="255" value="${p.value}"
+         data-p="${i}:${n}"></label>`).join('')}</div></div>`).join('');
+  document.querySelectorAll('[data-p]').forEach(inp=>inp.onchange=()=>{
+    const [i,n]=inp.dataset.p.split(':');
+    post(`/api/param?fx=${i}&p=${n}&v=${inp.value}`).then(refresh)});
+  document.querySelectorAll('[data-en]').forEach(b=>b.onclick=()=>
+    post(`/api/effect?i=${b.dataset.en}&enabled=${st.effects[b.dataset.en].enabled?0:1}`).then(refresh));
+  document.querySelectorAll('[data-fx]').forEach(b=>b.onclick=()=>{
+    const e=st.effects[b.dataset.fx];
+    const v=e.override<0?prompt(`Pin ${e.name} to (0-255):`,e.level):-1;
+    if(v!==null)post(`/api/effect?i=${b.dataset.fx}&set=${v}`).then(refresh)});
+}
+
+/* ---- state timeline: one band per contiguous run of a mode ---- */
+function renderTimeline(){
+  const svg=document.getElementById('timeline');
+  svg.innerHTML='';
+  if(hist.length<2){svg.innerHTML='<text x="0" y="24" fill="var(--text-muted)" font-size="12">No samples yet</text>';return}
+  const W=svg.clientWidth||900,H=46,BAND=22,GAP=2;
+  const t0=hist[0].ts,t1=hist[hist.length-1].ts,span=(t1-t0)||1;
+  const x=t=>(t-t0)/span*W;
+
+  const runs=[];
+  hist.forEach((h,i)=>{
+    const key=h.up?('m'+h.mode):'down';
+    const last=runs[runs.length-1];
+    if(last&&last.key===key)last.end=h.ts;
+    else runs.push({key,mode:h.mode,up:h.up,start:i?hist[i-1].ts:h.ts,end:h.ts});
+  });
+
+  let out='';
+  for(const r of runs){
+    const w=Math.max(1,x(r.end)-x(r.start)-GAP);   // 2px surface gap between segments
+    const fill=r.up?`var(${MODE_VAR[r.mode]||'--text-muted'})`:'var(--status-critical)';
+    const label=r.up?(MODES[r.mode]||'?'):'Unreachable';
+    out+=`<rect x="${x(r.start).toFixed(1)}" y="2" width="${w.toFixed(1)}" height="${BAND}" rx="4"
+      fill="${fill}" data-l="${label}" data-a="${hhmm(r.start)}" data-b="${hhmm(r.end)}"></rect>`;
+    // Direct label where the band is wide enough: identity never rests on color alone.
+    if(w>62)out+=`<text x="${(x(r.start)+6).toFixed(1)}" y="18" font-size="11" fill="#fff"
+      style="pointer-events:none">${label}</text>`;
+  }
+  const ticks=6;
+  for(let i=0;i<=ticks;i++){
+    const t=t0+span*i/ticks;
+    out+=`<text x="${Math.min(x(t),W-26).toFixed(1)}" y="40" font-size="11"
+      fill="var(--text-muted)">${hhmm(t)}</text>`;
+  }
+  svg.innerHTML=out;
+  svg.querySelectorAll('rect').forEach(r=>{
+    r.onmousemove=e=>showTip(e,`<b>${r.dataset.l}</b><br>${r.dataset.a} – ${r.dataset.b}`);
+    r.onmouseleave=hideTip;
+  });
+
+  const seen=[...new Set(runs.map(r=>r.key))];
+  document.getElementById('tllegend').innerHTML=seen.map(k=>{
+    const down=k==='down',m=+k.slice(1);
+    return `<span><i style="background:${down?'var(--status-critical)':`var(${MODE_VAR[m]})`}"></i>${down?'▲ Unreachable':MODES[m]}</span>`;
+  }).join('');
+}
+
+function renderSparks(){
+  const up=hist.filter(h=>h.up);
+  const series=[['Brightness','brightness',''],['Frame rate','fps',' fps'],['Signal','rssi',' dBm']];
+  document.getElementById('sparks').innerHTML=series.map(([label,key,unit])=>{
+    const v=up.map(h=>h[key]).filter(x=>x!=null);
+    if(!v.length)return kpi(label,'—','no samples');
+    const lo=Math.min(...v),hi=Math.max(...v);
+    return kpi(label,v[v.length-1]+unit,`${lo}–${hi} over ${hours<24?hours+'h':(hours/24)+'d'}`,spark(v,150,26));
+  }).join('');
+
+  const rows=hist.slice(-14).reverse();
+  document.getElementById('tv').innerHTML='<tr><th>Time</th><th>Mode</th><th>Bright</th><th>fps</th><th>dBm</th></tr>'+
+    rows.map(h=>`<tr><td>${hhmm(h.ts)}</td><td>${h.up?(MODES[h.mode]||h.mode):'unreachable'}</td>
+      <td>${h.brightness??''}</td><td>${h.fps??''}</td><td>${h.rssi??''}</td></tr>`).join('');
+}
+
+function loadHistory(){
+  document.querySelectorAll('[data-h]').forEach(b=>b.classList.toggle('on',+b.dataset.h===hours));
+  fetch('/api/history?hours='+hours).then(r=>r.json()).then(j=>{
+    hist=j;renderTimeline();renderSparks();renderLive();}).catch(()=>{});
+}
+function refresh(){
+  fetch('/api/status').then(r=>r.json()).then(j=>{st=j;renderLive()}).catch(()=>{});
+  fetch('/api/frame').then(r=>r.text()).then(drawFrame).catch(()=>{});
+}
+refresh();loadHistory();
+setInterval(refresh,2000);
+setInterval(loadHistory,60000);
+addEventListener('resize',()=>renderTimeline());
+</script></body></html>

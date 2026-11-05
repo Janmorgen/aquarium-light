@@ -1,0 +1,32 @@
+# Control surface for the aquarium light.
+#
+# Deployed as its own compose project rather than a Portainer stack: Portainer's
+# compose directory is root-owned and Portainer manages what is in it. This
+# follows the pattern already used on this host for Portainer itself, and shows
+# up in the Portainer UI as a project it does not control.
+#
+#   docker compose up -d      from this directory
+
+services:
+  aquarium-control:
+    image: python:3.12-slim
+    container_name: aquarium-control
+    restart: unless-stopped
+    # Standard library only, so there is no pip step and no network dependency
+    # at start - the image runs the mounted script as-is.
+    command: python3 -u /app/server.py
+    working_dir: /app
+    volumes:
+      - ./app:/app:ro
+      - ./data:/data
+    environment:
+      TZ: America/Denver
+      LIGHT_HOST: "192.168.1.166"
+      LIGHT_USER: "aquarium"
+      LIGHT_PASS: "${LIGHT_PASS:?set LIGHT_PASS in .env}"
+      PORT: "8181"
+      POLL_SECONDS: "10"
+      RETAIN_DAYS: "14"
+      DB_PATH: /data/history.db
+    ports:
+      - "8181:8181"

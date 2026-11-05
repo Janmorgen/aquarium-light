@@ -1,0 +1,7 @@
+# Pinned so a bare `arduino-cli compile .` cannot pick the wrong partition
+# table. The scheme matters: it decides whether there are two app slots to
+# flash between, and it is the one thing an OTA push can never change - the
+# partition table is written at 0x8000 by esptool, and OTA only ever writes the
+# inactive app slot. Changing it means retrieving the board.
+default_fqbn: esp32:esp32:esp32da:PartitionScheme=no_fs
+default_port: /dev/ttyUSB0
